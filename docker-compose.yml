@@ -1,0 +1,76 @@
+# Based on example from https://bitsharestalk.org/index.php?topic=26396.0
+version: '3'
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.1.0
+    container_name: elasticsearch
+    environment:
+      - ELASTIC_PASSWORD=secret
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms12g -Xmx12g"
+    networks:
+      stack:
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - /Volumes/Samsung_T5/BitShares/esdata:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+
+# Logstash not needed
+  # logstash:
+  #   image: docker.elastic.co/logstash/logstash:7.1.0
+  #   container_name: logstash
+  #   networks: ['stack']
+  #   depends_on: ['elasticsearch']
+  #   healthcheck:
+  #     test: bin/logstash -t
+  #     interval: 60s
+  #     timeout: 50s
+  #     retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.1.0
+    container_name: kibana
+    ports: ['5601:5601']
+    networks: ['stack']
+    depends_on: ['elasticsearch']
+    healthcheck:
+      # test: curl --cacert /usr/share/elasticsearch/config/certs/ca/ca.crt -s https://localhost:5601 >/dev/null; if [[ $$? == 52 ]]; then echo 0; else echo 1; fi
+      test: curl -s https://localhost:5601 >/dev/null; if [[ $$? == 52 ]]; then echo 0; else echo 1; fi
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  fullnode:
+    image: bitshares/bitshares-core:latest
+    container_name: fullnode
+    environment:
+      - BITSHARESD_PLUGINS=witness elasticsearch market_history grouped_orders
+      - BITSHAEESD_ARGS=--api-access /var/lib/bitshares/config/api-access.json
+      - BITSHARESD_ES_NODE_URL=http://elasticsearch:9200/
+      - BITSHARESD_RPC_ENDPOINT=0.0.0.0:8090
+      - BITSHARESD_P2P_ENDPOINT=0.0.0.0:9090
+      # - BITSHARESD_WITNESS_ID="1.6.122"
+      # - BITSHARESD_PRIVATE_KEY=["BTS...","5..."]
+    networks:
+      stack:
+    ports:
+      - 9090:9090
+      - 8090:8090
+    volumes:
+      - /Volumes/Samsung_T5/BitShares/fullnode:/var/lib/bitshares
+      - ./api-access.json:/var/lib/bitshares/config
+    depends_on:
+      - elasticsearch
+
+volumes:
+  fullnode:
+  esdata:
+
+networks:
+  stack:
